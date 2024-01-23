@@ -97,27 +97,54 @@ class DBBench(Task):
         res = (await session.action()).content or ""
         answer = ""
         finish_reason = SampleStatus.COMPLETED
+        agent_validation_failed = 0
+        agent_validation_failed_limit = self.max_round - 1
+        agent_validation_message = "You chose to answer but didn't follow the formatting in your output. Let me repeat the correct formatting: \nAction: Operation\n```sql\nSELECT * FROM table WHERE condition;\n```\nYou MUST put SQL in markdown format without any other comments. Your SQL should be in one line.\n"
         try:
             action = re.search(r"Action: (.*?)\n", res)
+            answer = re.search(r"\nFinal Answer:(.*)", res)
             rounds = 0
-            while action and action.group(1) == "Operation" and rounds < self.max_round:
-                res = re.search(r"```sql\n([\s\S]*?)\n```", res)
-                if not res:
+            while (rounds <= self.max_round and not answer):
+                if (action and action.group(1) == "Operation"):
+                    res = re.search(r"```sql\n([\s\S]*?)\n```", res)
+                    if not res:
+                        finish_reason = SampleStatus.AGENT_VALIDATION_FAILED
+                        #There is Operation but no SQLs
+                        agent_validation_failed += 1
+                        if (agent_validation_failed >= agent_validation_failed_limit):
+                            break
+                        session.inject({"role": "user", "content": agent_validation_message + "There is Operation but no SQL.\n"})
+                    else:
+                        sql = res.group(1).strip()
+                        sql = sql.replace("\n", " ")
+                        response = container.execute(sql, db)
+                        if response:
+                            session.inject({"role": "user", "content": response})
+                        else:
+                            session.inject({"role": "user", "content": ""})
+                        finish_reason = SampleStatus.COMPLETED
+                elif (re.search(r"```sql\n([\s\S]*?)\n```", res)):
+                    #There is SQL but no Operation
                     finish_reason = SampleStatus.AGENT_VALIDATION_FAILED
-                    break
-                sql = res.group(1).strip()
-                sql = sql.replace("\n", " ")
-                response = container.execute(sql, db)
-                if response:
-                    session.inject({"role": "user", "content": response})
+                    agent_validation_failed += 1
+                    if (agent_validation_failed >= agent_validation_failed_limit):
+                        break
+                    session.inject({"role": "user", "content": agent_validation_message + "There is SQL but no Operation.\n"})
                 else:
-                    session.inject({"role": "user", "content": ""})
+                    #There is no SQL and no Operation
+                    finish_reason = SampleStatus.AGENT_VALIDATION_FAILED
+                    agent_validation_failed += 1
+                    if (agent_validation_failed >= agent_validation_failed_limit):
+                        break
+                    session.inject({"role": "user", "content": agent_validation_message + "There is neither SQL nor Operation.\n"})
+
                 res = await session.action()
                 if res.status == AgentOutputStatus.AGENT_CONTEXT_LIMIT:
                     finish_reason = SampleStatus.AGENT_CONTEXT_LIMIT
                     break
                 res = res.content
                 action = re.search(r"Action: (.*?)\n", res)
+                answer = re.search(r"\nFinal Answer:(.*)", res)                
                 rounds += 1
             else:
                 answer = re.search(r"\nFinal Answer:(.*)", res)
