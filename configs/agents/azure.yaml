@@ -1,0 +1,15 @@
+module: src.client.agents.HTTPAgent
+parameters:
+  url: https://flaml-east.openai.azure.com/
+  model: gpt-4
+  api_version: 2023-07-01-preview
+  headers:
+    Content-Type: application/json
+    api-key: 1bcba03e07bc40839264e9380c391751
+  body:
+    temperature: 0
+  prompter:
+    name: role_content_dict
+    args:
+      agent_role: assistant
+  return_format: "{response[choices][0][message][content]}"

@@ -1,3 +1,9 @@
+#import debugpy
+#debugpy.listen(("localhost", 5678))
+#print('listening to port 5678, attach the debugger to continue')
+#debugpy.wait_for_client()
+import re
+
 import contextlib
 import time
 import warnings
@@ -175,6 +181,13 @@ class HTTPAgent(AgentClient):
         super().__init__(**kwargs)
         self.url = url
         self.proxies = proxies or {}
+        if ("azure.com" in self.url):
+            #deal with azure
+            api_version = kwargs.get("api_version")
+            model = kwargs.get("model")
+            suffix = f"/openai/deployments/{model}/chat/completions?api-version={api_version}"
+            if not self.url.endswith(suffix):
+                self.url += suffix[1:] if self.url.endswith("/") else suffix
         self.headers = headers or {}
         self.body = body or {}
         self.return_format = return_format
@@ -188,13 +201,34 @@ class HTTPAgent(AgentClient):
     def inference(self, history: List[dict]) -> str:
         for _ in range(3):
             try:
-                body = self.body.copy()
-                body.update(self._handle_history(history))
-                with no_ssl_verification():
-                    resp = requests.post(
-                        self.url, json=body, headers=self.headers, proxies=self.proxies, timeout=120
-                    )
-                # print(resp.status_code, resp.text)
+                while (True):
+                    body = self.body.copy()
+                    body.update(self._handle_history(history))
+                    with no_ssl_verification():
+                        resp = requests.post(
+                            self.url, json=body, headers=self.headers, proxies=self.proxies, timeout=120
+                        )
+                    # print(resp.status_code, resp.text)
+                    if (resp.status_code != 429):
+                        break
+
+                    error_info = json.loads(resp.text)
+                    error_code = error_info['error']['code']
+
+                    if (error_code == 'rate_limit_exceeded' or error_code == '429'):
+                        match = re.search(r'retry after (\d+)', error_info['error']['message'])
+                        if match:
+                            retry_after = int(match.group(1))
+                            print(retry_after)
+                        else:
+                            retry_after = 60
+                        retry_after += 1
+
+                        print(f'Rate limit exceeded. Waiting for {retry_after} seconds...')
+                        time.sleep(retry_after)
+                    else: 
+                        break
+
                 if resp.status_code != 200:
                     # print(resp.text)
                     if check_context_limit(resp.text):

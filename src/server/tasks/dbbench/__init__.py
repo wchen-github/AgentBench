@@ -147,7 +147,13 @@ class DBBench(Task):
             )
             answer = container.execute(md5_query, db)
         container.execute(f"drop database `{db}`")
-        return TaskOutput(
+
+        #from src.typings.general import ChatHistoryItem
+        #filename = f"session_{index}.txt"
+        #with open(filename, "w") as file:
+        #    json.dump(history=session.history, cls=ChatHistoryItem.to_dict)
+
+        taskoutput = TaskOutput(
             status=finish_reason,
             result={
                 "answer": str(answer),
@@ -155,7 +161,13 @@ class DBBench(Task):
                 "error": error,
             },
             history=session.history,
+            index=index,
         )
+        acc = self.calculate_overall([taskoutput])
+        acc_for_type = acc[f'{taskoutput.result["type"]}_accuracy']
+        taskoutput.result["accuracy"] = acc_for_type
+
+        return taskoutput
 
     def calculate_overall(self, results: List[TaskOutput]) -> Dict[str, Any]:
         metrics = self.metrics

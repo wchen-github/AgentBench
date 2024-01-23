@@ -43,3 +43,8 @@ class Assignment(BaseModel):
 class ChatHistoryItem(BaseModel):
     role: Literal["user", "agent"]
     content: str
+    def to_dict(self):
+            return {
+                "role": self.role,
+                "content": self.content
+            }    

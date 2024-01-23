@@ -21,3 +21,11 @@ text-davinci-002:
         body:
             model: "text-davinci-002"
             max_tokens: 512
+
+azure-gpt-4:
+    import: "./azure.yaml"
+    parameters:
+        name: "azure-gpt-4"
+        body:
+            max_tokens: 2048
+

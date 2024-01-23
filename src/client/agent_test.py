@@ -1,4 +1,12 @@
+#import debugpy
+#debugpy.listen(("localhost", 6789))
+#print('listening to port 6789, attach the debugger to continue')
+#debugpy.wait_for_client()
+
 import argparse
+
+import os
+print(os.getcwd())
 
 from src.configs import ConfigLoader
 from src.typings import InstanceFactory
