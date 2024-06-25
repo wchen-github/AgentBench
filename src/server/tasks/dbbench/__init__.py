@@ -98,8 +98,15 @@ class DBBench(Task):
         answer = ""
         finish_reason = SampleStatus.COMPLETED
         agent_validation_failed = 0
-        agent_validation_failed_limit = self.max_round - 1
-        agent_validation_message = "You chose to answer but didn't follow the formatting in your output. Let me repeat the correct formatting: \nAction: Operation\n```sql\nSELECT * FROM table WHERE condition;\n```\nYou MUST put SQL in markdown format without any other comments. Your SQL should be in one line.\n"
+        agent_validation_failed_limit = 2
+        #agent_validation_message = "You chose to answer but didn't follow the formatting in your output. Let me repeat the correct formatting: \nAction: Operation\n```sql\nSELECT * FROM table WHERE condition;\n```\nYou MUST put SQL in markdown format without any other comments. Your SQL should be in one line.\n"
+        agent_validation_message = ("Above, you were given a conversation between user and agent. Look at the last response from the agent and see if there is any semantic or formatting error not in accordance with user's instruction.\n"
+                                    "Follow theses steps:\n"
+                                    "Step 1: Analyze the user request and your response. Look both semantic and formatting errors. List them down. Build up your answer in step-by-step answer.\n"
+                                    "Step 2: Was there any error in Step 1? If yes go to step 3. Else go to step 4.\n"
+                                    "Step 3. Fix the errors and regenerate the response. Use the format:   <thought>   how to fix   </thought>   <fixed_solution>   write the fixed response   </fixed_solution> \n"
+                                    "Step 4: Echo the original response in the desired formatting \n"
+                                    "After receiving your response, I will execute the operation and give you the output. If you are done operating, and you want to commit your final answer, then write down in accordance with user's instruction\n")
         try:
             action = re.search(r"Action: (.*?)\n", res)
             answer = re.search(r"\nFinal Answer:(.*)", res)
@@ -113,7 +120,7 @@ class DBBench(Task):
                         agent_validation_failed += 1
                         if (agent_validation_failed >= agent_validation_failed_limit):
                             break
-                        session.inject({"role": "user", "content": agent_validation_message + "There is Operation but no SQL.\n"})
+                        session.inject({"role": "user", "content": agent_validation_message})
                     else:
                         sql = res.group(1).strip()
                         sql = sql.replace("\n", " ")
@@ -129,14 +136,14 @@ class DBBench(Task):
                     agent_validation_failed += 1
                     if (agent_validation_failed >= agent_validation_failed_limit):
                         break
-                    session.inject({"role": "user", "content": agent_validation_message + "There is SQL but no Operation.\n"})
+                    session.inject({"role": "user", "content": agent_validation_message})
                 else:
                     #There is no SQL and no Operation
                     finish_reason = SampleStatus.AGENT_VALIDATION_FAILED
                     agent_validation_failed += 1
                     if (agent_validation_failed >= agent_validation_failed_limit):
                         break
-                    session.inject({"role": "user", "content": agent_validation_message + "There is neither SQL nor Operation.\n"})
+                    session.inject({"role": "user", "content": agent_validation_message})
 
                 res = await session.action()
                 if res.status == AgentOutputStatus.AGENT_CONTEXT_LIMIT:
